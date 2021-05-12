@@ -1,20 +1,38 @@
 import { Identifier, ts } from 'ts-morph';
+import { SPARTACUS_SCOPE } from '../constants';
 
 export function isImportedFrom(node: Identifier, importPath: string): boolean {
-  let result = false;
   const definitions = node.getDefinitions();
-  definitions.forEach((def) => {
+  for (const def of definitions) {
     const node = def.getDeclarationNode();
-    if (node) {
-      const declaration = node.getFirstAncestorByKind(
-        ts.SyntaxKind.ImportDeclaration
-      );
-      if (declaration) {
-        if (declaration.getModuleSpecifier().getText().includes(importPath)) {
-          result = true;
-        }
-      }
+
+    const declaration = node?.getFirstAncestorByKind(
+      ts.SyntaxKind.ImportDeclaration
+    );
+    if (declaration?.getModuleSpecifier().getText().includes(importPath)) {
+      return true;
     }
-  });
-  return result;
+  }
+
+  return false;
+}
+
+export function isImportedFromSpartacusLibs(node: Identifier): boolean {
+  const definitions = node.getDefinitions();
+  for (const def of definitions) {
+    const node = def.getDeclarationNode();
+
+    const declaration = node?.getFirstAncestorByKind(
+      ts.SyntaxKind.ImportDeclaration
+    );
+    const moduleSpecifier = declaration?.getModuleSpecifier().getText();
+    if (
+      moduleSpecifier?.startsWith(`'${SPARTACUS_SCOPE}`) ||
+      moduleSpecifier?.startsWith(`"${SPARTACUS_SCOPE}`)
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }

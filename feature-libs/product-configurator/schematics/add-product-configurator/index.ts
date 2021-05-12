@@ -1,80 +1,111 @@
 import {
   chain,
+  noop,
   Rule,
   SchematicContext,
   Tree,
 } from '@angular-devkit/schematics';
 import {
-  NodeDependency,
-  NodeDependencyType,
-} from '@schematics/angular/utility/dependencies';
-import {
   addLibraryFeature,
-  addPackageJsonDependencies,
-  getAppModule,
-  getSpartacusSchematicsVersion,
-  installPackageJsonDependencies,
+  addPackageJsonDependenciesForLibrary,
+  CLI_PRODUCT_CONFIGURATOR_FEATURE,
+  configureB2bFeatures,
   LibraryOptions as SpartacusProductConfiguratorOptions,
   readPackageJson,
+  shouldAddFeature,
+  SPARTACUS_PRODUCT_CONFIGURATOR,
   validateSpartacusInstallation,
 } from '@spartacus/schematics';
-
-export const CLI_PRODUCT_CONFIGURATOR_FEATURE = 'ProductConfigurator';
-export const SPARTACUS_PRODUCT_CONFIGURATOR = '@spartacus/product-configurator';
-
-const PRODUCT_CONFIGURATOR_SCSS_FILE_NAME = 'product-configurator.scss';
-const PRODUCT_CONFIGURATOR_RULEBASED_MODULE = 'RulebasedConfiguratorModule';
-const PRODUCT_CONFIGURATOR_TEXTFIELD_MODULE = 'TextfieldConfiguratorModule';
-const PRODUCT_CONFIGURATOR_RULEBASED_FEATURE_NAME = 'rulebased';
-const PRODUCT_CONFIGURATOR_TEXTFIELD_FEATURE_NAME = 'textfield';
-
-const PRODUCT_CONFIGURATOR_RULEBASED_ROOT_MODULE =
-  'RulebasedConfiguratorRootModule';
-const PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT_MODULE =
-  'TextfieldConfiguratorRootModule';
-const SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED =
-  '@spartacus/product-configurator/rulebased';
-const SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD =
-  '@spartacus/product-configurator/textfield';
-
-const SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_ROOT = `${SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED}/root`;
-const SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT = `${SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD}/root`;
-const SPARTACUS_PRODUCT_CONFIGURATOR_ASSETS = `${SPARTACUS_PRODUCT_CONFIGURATOR}/common/assets`;
-const PRODUCT_CONFIGURATOR_TRANSLATIONS = 'configuratorTranslations';
-const PRODUCT_CONFIGURATOR_TRANSLATION_CHUNKS_CONFIG =
-  'configuratorTranslationChunksConfig';
+import { peerDependencies } from '../../package.json';
+import {
+  CLI_CPQ_FEATURE,
+  CLI_TEXTFIELD_FEATURE,
+  PRODUCT_CONFIGURATOR_FOLDER_NAME,
+  PRODUCT_CONFIGURATOR_RULEBASED_CPQ_MODULE,
+  PRODUCT_CONFIGURATOR_RULEBASED_CPQ_ROOT_MODULE,
+  PRODUCT_CONFIGURATOR_RULEBASED_FEATURE_NAME_CONSTANT,
+  PRODUCT_CONFIGURATOR_RULEBASED_MODULE,
+  PRODUCT_CONFIGURATOR_RULEBASED_ROOT_MODULE,
+  PRODUCT_CONFIGURATOR_SCSS_FILE_NAME,
+  PRODUCT_CONFIGURATOR_TEXTFIELD_FEATURE_NAME_CONSTANT,
+  PRODUCT_CONFIGURATOR_TEXTFIELD_MODULE,
+  PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT_MODULE,
+  PRODUCT_CONFIGURATOR_TRANSLATIONS,
+  PRODUCT_CONFIGURATOR_TRANSLATION_CHUNKS_CONFIG,
+  SPARTACUS_PRODUCT_CONFIGURATOR_ASSETS,
+  SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED,
+  SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_CPQ,
+  SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_ROOT,
+  SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD,
+  SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT,
+} from '../constants';
 
 export function addProductConfiguratorFeatures(
   options: SpartacusProductConfiguratorOptions
 ): Rule {
-  return (tree: Tree, _context: SchematicContext) => {
+  return (tree: Tree, context: SchematicContext) => {
     const packageJson = readPackageJson(tree);
     validateSpartacusInstallation(packageJson);
 
-    const appModulePath = getAppModule(tree, options.project);
-
     return chain([
-      addProductConfiguratorRulebasedFeature(appModulePath, options),
-      addProductConfiguratorTextfieldFeature(appModulePath, options),
-      addProductConfiguratorPackageJsonDependencies(packageJson),
-      installPackageJsonDependencies(),
+      addProductConfiguratorRulebasedFeature(options),
+
+      shouldAddFeature(CLI_CPQ_FEATURE, options.features)
+        ? addCpqRulebasedRootModule(options)
+        : noop(),
+
+      shouldAddFeature(CLI_CPQ_FEATURE, options.features)
+        ? configureB2bFeatures(options, packageJson)
+        : noop(),
+
+      shouldAddFeature(CLI_TEXTFIELD_FEATURE, options.features)
+        ? addProductConfiguratorTextfieldFeature(options)
+        : noop(),
+
+      addPackageJsonDependenciesForLibrary({
+        packageJson,
+        context,
+        dependencies: peerDependencies,
+        options,
+      }),
     ]);
   };
 }
 
+/**
+ * Called with or without CPQ enabled, and uses a different
+ * application module for CPQ
+ * @param options Schematics options
+ * @returns
+ */
 function addProductConfiguratorRulebasedFeature(
-  appModulePath: string,
   options: SpartacusProductConfiguratorOptions
 ): Rule {
-  return addLibraryFeature(appModulePath, options, {
-    name: PRODUCT_CONFIGURATOR_RULEBASED_FEATURE_NAME,
+  let moduleName: string;
+  let moduleImportPath: string;
+
+  if (shouldAddFeature(CLI_CPQ_FEATURE, options.features)) {
+    moduleName = PRODUCT_CONFIGURATOR_RULEBASED_CPQ_MODULE;
+    moduleImportPath = SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_CPQ;
+  } else {
+    moduleName = PRODUCT_CONFIGURATOR_RULEBASED_MODULE;
+    moduleImportPath = SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED;
+  }
+
+  return addLibraryFeature(options, {
+    folderName: PRODUCT_CONFIGURATOR_FOLDER_NAME,
+    moduleName: CLI_PRODUCT_CONFIGURATOR_FEATURE,
     featureModule: {
-      name: PRODUCT_CONFIGURATOR_RULEBASED_MODULE,
-      importPath: SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED,
+      name: moduleName,
+      importPath: moduleImportPath,
     },
     rootModule: {
       name: PRODUCT_CONFIGURATOR_RULEBASED_ROOT_MODULE,
       importPath: SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_ROOT,
+    },
+    lazyLoadingChunk: {
+      moduleSpecifier: SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_ROOT,
+      namedImports: [PRODUCT_CONFIGURATOR_RULEBASED_FEATURE_NAME_CONSTANT],
     },
     i18n: {
       resources: PRODUCT_CONFIGURATOR_TRANSLATIONS,
@@ -87,13 +118,40 @@ function addProductConfiguratorRulebasedFeature(
     },
   });
 }
-
-function addProductConfiguratorTextfieldFeature(
-  appModulePath: string,
+/**
+ * Needed to set the CPQ specific root module that
+ * enforces early login and must not be active for
+ * other configurators
+ * @param options Schematics options
+ * @returns
+ */
+function addCpqRulebasedRootModule(
   options: SpartacusProductConfiguratorOptions
 ): Rule {
-  return addLibraryFeature(appModulePath, options, {
-    name: PRODUCT_CONFIGURATOR_TEXTFIELD_FEATURE_NAME,
+  return addLibraryFeature(options, {
+    folderName: PRODUCT_CONFIGURATOR_FOLDER_NAME,
+    moduleName: CLI_PRODUCT_CONFIGURATOR_FEATURE,
+    featureModule: {
+      name: PRODUCT_CONFIGURATOR_RULEBASED_CPQ_MODULE,
+      importPath: SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_CPQ,
+    },
+    rootModule: {
+      name: PRODUCT_CONFIGURATOR_RULEBASED_CPQ_ROOT_MODULE,
+      importPath: SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_ROOT,
+    },
+    lazyLoadingChunk: {
+      moduleSpecifier: SPARTACUS_PRODUCT_CONFIGURATOR_RULEBASED_ROOT,
+      namedImports: [PRODUCT_CONFIGURATOR_RULEBASED_FEATURE_NAME_CONSTANT],
+    },
+  });
+}
+
+function addProductConfiguratorTextfieldFeature(
+  options: SpartacusProductConfiguratorOptions
+): Rule {
+  return addLibraryFeature(options, {
+    folderName: PRODUCT_CONFIGURATOR_FOLDER_NAME,
+    moduleName: CLI_PRODUCT_CONFIGURATOR_FEATURE,
     featureModule: {
       name: PRODUCT_CONFIGURATOR_TEXTFIELD_MODULE,
       importPath: SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD,
@@ -102,6 +160,10 @@ function addProductConfiguratorTextfieldFeature(
       name: PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT_MODULE,
       importPath: SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT,
     },
+    lazyLoadingChunk: {
+      moduleSpecifier: SPARTACUS_PRODUCT_CONFIGURATOR_TEXTFIELD_ROOT,
+      namedImports: [PRODUCT_CONFIGURATOR_TEXTFIELD_FEATURE_NAME_CONSTANT],
+    },
     i18n: {
       resources: PRODUCT_CONFIGURATOR_TRANSLATIONS,
       chunks: PRODUCT_CONFIGURATOR_TRANSLATION_CHUNKS_CONFIG,
@@ -112,16 +174,4 @@ function addProductConfiguratorTextfieldFeature(
       importStyle: SPARTACUS_PRODUCT_CONFIGURATOR,
     },
   });
-}
-
-function addProductConfiguratorPackageJsonDependencies(packageJson: any): Rule {
-  const spartacusVersion = `^${getSpartacusSchematicsVersion()}`;
-  const dependencies: NodeDependency[] = [
-    {
-      type: NodeDependencyType.Default,
-      version: spartacusVersion,
-      name: SPARTACUS_PRODUCT_CONFIGURATOR,
-    },
-  ];
-  return addPackageJsonDependencies(dependencies, packageJson);
 }

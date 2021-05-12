@@ -1,14 +1,19 @@
 import { Rule, SchematicsException, Tree } from '@angular-devkit/schematics';
 import { CallExpression, Node, SourceFile, ts } from 'ts-morph';
+import {
+  ANGULAR_CORE,
+  ANGULAR_ROUTER,
+  SPARTACUS_ROUTING_MODULE,
+} from '../shared/constants';
 import { isImportedFrom } from '../shared/utils/import-utils';
-import { createProgram } from '../shared/utils/program';
+import { addModuleImport } from '../shared/utils/new-module-utils';
+import { createProgram, saveAndFormat } from '../shared/utils/program';
 import { getProjectTsConfigPaths } from '../shared/utils/project-tsconfig-paths';
 
 /** Migration that ensures that we have correct RouterModule.forRoot set */
 export function setupRouterModule(project: string): Rule {
-  return (tree: Tree) => {
+  return (tree: Tree): Tree => {
     const { buildPaths } = getProjectTsConfigPaths(tree, project);
-    const basePath = process.cwd();
 
     if (!buildPaths.length) {
       throw new SchematicsException(
@@ -16,6 +21,7 @@ export function setupRouterModule(project: string): Rule {
       );
     }
 
+    const basePath = process.cwd();
     for (const tsconfigPath of buildPaths) {
       configureRouterModule(tree, tsconfigPath, basePath);
     }
@@ -27,20 +33,30 @@ function configureRouterModule(
   tree: Tree,
   tsconfigPath: string,
   basePath: string
-) {
+): void {
   const { appSourceFiles } = createProgram(tree, basePath, tsconfigPath);
 
-  appSourceFiles.forEach((sourceFile) => {
-    if (sourceFile.getFilePath().includes('app-routing.module.ts')) {
+  for (const sourceFile of appSourceFiles) {
+    if (
+      sourceFile.getFilePath().includes(`${SPARTACUS_ROUTING_MODULE}.module.ts`)
+    ) {
       let routerModule = getRouterModule(sourceFile);
       if (!routerModule) {
-        routerModule = addRouterModuleImport(sourceFile);
+        routerModule = addModuleImport(sourceFile, {
+          import: {
+            moduleSpecifier: ANGULAR_ROUTER,
+            namedImports: ['RouterModule'],
+          },
+          content: `RouterModule.forRoot([])`,
+        }) as CallExpression;
       }
-      configureOptionsInRouterModule(routerModule as CallExpression);
-      sourceFile.organizeImports();
-      sourceFile.saveSync();
+      configureOptionsInRouterModule(routerModule);
+
+      saveAndFormat(sourceFile);
+
+      break;
     }
-  });
+  }
 }
 
 function getRouterModule(sourceFile: SourceFile): CallExpression | undefined {
@@ -54,7 +70,7 @@ function getRouterModule(sourceFile: SourceFile): CallExpression | undefined {
         if (
           Node.isIdentifier(exp) &&
           exp.getText() === 'RouterModule' &&
-          isImportedFrom(exp, '@angular/router') &&
+          isImportedFrom(exp, ANGULAR_ROUTER) &&
           expression.getName() === 'forRoot'
         ) {
           const assignment = node.getFirstAncestorByKind(
@@ -71,55 +87,10 @@ function getRouterModule(sourceFile: SourceFile): CallExpression | undefined {
                 if (
                   Node.isIdentifier(exp) &&
                   exp.getText() === 'NgModule' &&
-                  isImportedFrom(exp, '@angular/core')
+                  isImportedFrom(exp, ANGULAR_CORE)
                 ) {
                   routerNode = node;
                 }
-              }
-            }
-          }
-        }
-      }
-    }
-    node.forEachChild(visitor);
-  }
-
-  sourceFile.forEachChild(visitor);
-  return routerNode;
-}
-
-function addRouterModuleImport(
-  sourceFile: SourceFile
-): CallExpression | undefined {
-  let routerNode;
-
-  // We only want to consider RouterModule.forRoot()
-  // It needs to be in `imports` array in NgModule decorator
-  // The RouterModule must be imported from @angular/router and decorator from @angular/core
-
-  function visitor(node: Node) {
-    if (Node.isCallExpression(node)) {
-      const expression = node.getExpression();
-      if (
-        Node.isIdentifier(expression) &&
-        expression.getText() === 'NgModule' &&
-        isImportedFrom(expression, '@angular/core')
-      ) {
-        const args = node.getArguments();
-        if (args.length > 0) {
-          const arg = args[0];
-          if (Node.isObjectLiteralExpression(arg)) {
-            const property = arg.getProperty('imports');
-            if (property && Node.isPropertyAssignment(property)) {
-              const initializer = property.getInitializerIfKind(
-                ts.SyntaxKind.ArrayLiteralExpression
-              );
-              if (initializer) {
-                sourceFile.addImportDeclaration({
-                  moduleSpecifier: '@angular/router',
-                  namedImports: ['RouterModule'],
-                });
-                routerNode = initializer.addElement(`RouterModule.forRoot([])`);
               }
             }
           }
