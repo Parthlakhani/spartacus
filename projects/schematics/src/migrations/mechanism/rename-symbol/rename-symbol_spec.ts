@@ -1,14 +1,18 @@
-import { getSystemPath } from "@angular-devkit/core";
-import { TempScopedNodeJsSyncHost } from "@angular-devkit/core/node/testing";
-import { HostTree, Tree } from "@angular-devkit/schematics";
-import { SchematicTestRunner, UnitTestTree } from "@angular-devkit/schematics/testing";
+import { getSystemPath } from '@angular-devkit/core';
+import { TempScopedNodeJsSyncHost } from '@angular-devkit/core/node/testing';
+import { HostTree, Tree } from '@angular-devkit/schematics';
+import {
+  SchematicTestRunner,
+  UnitTestTree,
+} from '@angular-devkit/schematics/testing';
 import * as shx from 'shelljs';
-import { runMigration, writeFile } from "../../../shared/utils/test-utils";
+import { runMigration, writeFile } from '../../../shared/utils/test-utils';
 
 const MIGRATION_SCRIPT_NAME = 'migration-v4-rename-symbol-01';
 const PREVIOUS_IMPORT = `import { OtherComponent, StoreFinderMapComponent } from "@spartacus/storefront";`;
 const NEW_IMPORT = `import { OtherComponent, StoreFinderMapComponent } from "@spartacus/storefinder/components";`;
 const TAIL = `const testArray = [StoreFinderMapComponent, OtherComponent];`;
+
 describe('renamed symbols', () => {
   let host: TempScopedNodeJsSyncHost;
   let appTree = Tree.empty() as UnitTestTree;
@@ -19,7 +23,7 @@ describe('renamed symbols', () => {
   beforeEach(() => {
     schematicRunner = new SchematicTestRunner(
       'test',
-      require.resolve('../../migrations.json')
+      require.resolve('../../test/migrations-test.json')
     );
     host = new TempScopedNodeJsSyncHost();
     appTree = new UnitTestTree(new HostTree(host));
@@ -33,7 +37,6 @@ describe('renamed symbols', () => {
         },
       })
     );
-
     writeFile(
       host,
       '/angular.json',
@@ -41,8 +44,10 @@ describe('renamed symbols', () => {
         projects: {
           'spartacus-test': {
             sourceRoot: 'src',
-            architect: {
-              build: { options: { tsConfig: './tsconfig.json' } },
+            test: {
+              architect: {
+                build: { options: { tsConfig: './tsconfig.json' } },
+              },
             },
           },
         },
@@ -65,13 +70,14 @@ describe('renamed symbols', () => {
   describe('Previous import', () => {
     it('should became new import', async () => {
       writeFile(host, '/src/index.ts', PREVIOUS_IMPORT + '\n\n' + TAIL);
+      console.log('test');
 
       await runMigration(appTree, schematicRunner, MIGRATION_SCRIPT_NAME);
+      console.log('test2');
 
       const content = appTree.readContent('/src/index.ts');
-      // console.log(content);
+      console.log(content);
       expect(content).toEqual(NEW_IMPORT + '\n\n' + TAIL);
     });
   });
-  
 });

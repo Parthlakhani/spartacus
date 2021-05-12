@@ -21,11 +21,12 @@ export function migrateConstructorDeprecation(
   context.logger.info('Checking constructor deprecations...');
 
   const project = getSourceRoot(tree, {});
-  // console.log(`PROJECT: ${project}ENDPROJECT`); // src
+  console.log(`PROJECT: ${project}ENDPROJECT`); // src
+  console.log('project', project);
 
   const sourceFiles = getAllTsSourceFiles(tree, project);
   console.log(`SF: ${sourceFiles}ESF`);
-  
+
   for (const originalSource of sourceFiles) {
     const sourcePath = originalSource.fileName;
     console.log(sourcePath); // /src/index.ts

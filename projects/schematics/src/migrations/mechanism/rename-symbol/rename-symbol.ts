@@ -1,17 +1,19 @@
-import { Tree } from '@angular-devkit/schematics';
+import { SchematicContext, Tree } from '@angular-devkit/schematics';
 import { ImportDeclarationStructure } from 'ts-morph';
 import { RenamedSymbol } from '../../../shared/utils/file-utils';
-// import { getSourceNodes } from '@schematics/angular/utility/ast-utils';
 import { createProgram } from '../../../shared/utils/program';
 import { getProjectTsConfigPaths } from '../../../shared/utils/project-tsconfig-paths';
 import { getDefaultProjectNameFromWorkspace } from '../../../shared/utils/workspace-utils';
 
 export function migrateRenamedSymbols(
   tree: Tree,
+  context: SchematicContext,
   renamedSymbols: RenamedSymbol[]
 ): Tree {
-  const project = getDefaultProjectNameFromWorkspace(tree);
+  console.log('migrateRenamedSymbols');
+  context.logger.info('Checking renamed symbols...');
 
+  const project = getDefaultProjectNameFromWorkspace(tree);
   const { buildPaths } = getProjectTsConfigPaths(tree, project);
   const basePath = process.cwd();
 
@@ -22,7 +24,7 @@ export function migrateRenamedSymbols(
       const importDeclarationStructures: ImportDeclarationStructure[] = [];
       sourceFile.getImportDeclarations().forEach((id) => {
         id.getImportClause()
-          .getNamedImports()
+          ?.getNamedImports()
           .forEach((namedImport) => {
             const renamedSymbol = renamedSymbols.find(
               (_) =>
@@ -38,10 +40,14 @@ export function migrateRenamedSymbols(
                 namedImports: [renamedSymbol.newNode],
                 moduleSpecifier: renamedSymbol.newImportPath,
               } as ImportDeclarationStructure);
-              if (id.getImportClause().getNamedImports().length > 1) {
-                namedImport.remove();
-              } else {
-                id.remove();
+              const importedClause = id.getImportClause();
+
+              if (importedClause) {
+                if (importedClause.getNamedImports().length > 1) {
+                  namedImport.remove();
+                } else {
+                  id.remove();
+                }
               }
             }
           });

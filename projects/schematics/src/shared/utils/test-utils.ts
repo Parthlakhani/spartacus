@@ -22,6 +22,7 @@ export function runMigration(
   migrationScript: string,
   options = {}
 ): Promise<UnitTestTree> {
+  console.log('runMigration');
   return schematicRunner
     .runSchematicAsync(migrationScript, options, appTree)
     .toPromise();
